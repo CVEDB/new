@@ -1,0 +1,36 @@
+name: Daily CVE Release List
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Run every day at midnight (UTC)
+
+jobs:
+  generate_cve_list:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the code from the repository
+      - uses: actions/checkout@v2
+      
+      # Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+      
+      # Install Python dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      # Generate the CVE list and commit changes
+      - name: Generate and commit CVE list
+        run: python generate_cve_list.py ${{ secrets.API_KEY }}
+        
+        # Push the changes back to the repository
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: 'Update CVE release list'
+          commit_options: '--no-verify'
