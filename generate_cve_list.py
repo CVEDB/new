@@ -3,6 +3,7 @@ import time
 import zipfile
 import datetime
 import json
+import requests
 from github import Github
 
 # Define the base URL for the NVD data feeds
@@ -22,22 +23,22 @@ def create_zip_file(file_name, file_list):
 def create_cve_files(directory):
     # Set the date prefix
     date_prefix = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-    
+
     # Retrieve the data feed files
     cve_feed_meta_file_name = f"{date_prefix}_cve_feed_meta.json"
     cve_modified_file_name = f"{date_prefix}_modified.json"
     cve_recent_file_name = f"{date_prefix}_recent.json"
-    retrieve_cve_data(cve_feed_meta_file_name, f"{NVD_BASE_URL}nvdcve-1.1-%%d.meta")
+    retrieve_cve_data(cve_feed_meta_file_name, f"{NVD_BASE_URL}nvdcve-1.1-%d.meta")
     retrieve_cve_data(cve_modified_file_name, f"{NVD_BASE_URL}nvdcve-1.1-modified.json.gz")
     retrieve_cve_data(cve_recent_file_name, f"{NVD_BASE_URL}nvdcve-1.1-recent.json.gz")
-    
+
     # Create the recent activities directory
     os.makedirs(f"{directory}/recent_activities")
     with open(f"{directory}/recent_activities/{cve_recent_file_name}", 'wb') as f:
         with open(cve_recent_file_name, 'rb') as cve_file:
             f.write(cve_file.read())
     os.remove(cve_recent_file_name)
-    
+
     # Create the CVE files for each year and CVE ID
     for year in range(1999, datetime.datetime.today().year + 1):
         os.makedirs(f"{directory}/{year}")
@@ -46,12 +47,12 @@ def create_cve_files(directory):
             cve_file_name = f"{directory}/{year}/{cve_id_str}/CVE-{year}-{cve_id_str}.json"
             if os.path.exists(cve_file_name):
                 continue
-            retrieve_cve_data(cve_file_name, f"{NVD_BASE_URL}CVE-%d-%04d.json" % (year, cve_id))
+            retrieve_cve_data(cve_file_name, f"{NVD_BASE_URL}CVE-{year}-{cve_id_str}.json")
             if os.path.getsize(cve_file_name) == 0:
                 os.remove(cve_file_name)
             time.sleep(0.1)
-    
-    # Create the all CVEs zip file
+
+        # Create the all CVEs zip file
     all_cves_file_name = f"{date_prefix}_all_CVEs.zip"
     all_cve_files = []
     for year in range(1999, datetime.datetime.today().year + 1):
@@ -61,7 +62,7 @@ def create_cve_files(directory):
             if os.path.exists(cve_file_name):
                 all_cve_files.append(cve_file_name)
     create_zip_file(all_cves_file_name, all_cve_files)
-    
+
     # Create the release notes file
     release_notes_file_name = f"{date_prefix}_Release_Notes.txt"
     with open(release_notes_file_name, 'w') as f:
@@ -77,8 +78,9 @@ def commit_cve_files_to_repo(github_token, repo_full_name, branch_name, file_nam
     branch = repo.get_branch(branch_name)
     commit_title = f'Update CVE release list {datetime.datetime.now().strftime("%Y-%m-%d")}'
     commit_message = 'Add new CVE release list'
-
     # Remove old files
     contents = repo.get_contents('')
     for content_file in contents:
-       
+        if content_file.type == 'file' and content_file.name.endswith('.zip'):
+            if content_file.name not in file_names:
+                repo.delete_file(content_file
