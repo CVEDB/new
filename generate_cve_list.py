@@ -1,35 +1,17 @@
 import os
-import requests
+import time
 import zipfile
 import datetime
 import json
 from github import Github
 
-# Define the API endpoint for the CVE Services API
-API_URL = 'https://services.nvd.nist.gov/rest/json/cves/1.0'
+# Define the base URL for the NVD data feeds
+NVD_BASE_URL = 'https://nvd.nist.gov/feeds/json/cve/1.1/'
 
-def get_api_key(api_key_secret_name):
-    api_key = os.environ.get(api_key_secret_name)
-    if api_key is None:
-        raise ValueError(f"API key '{api_key_secret_name}' not found in environment variables")
-    return api_key
-
-def get_all_cves(api_key):
-    response = requests.get(API_URL, headers={"API_KEY": api_key})
-    if response.status_code == 200:
-        all_cves = response.json()['result']['CVE_Items']
-        return all_cves
-    else:
-        raise ValueError(f"Failed to retrieve all CVEs. Response code: {response.status_code}")
-        
-def get_delta_cves(api_key, start_time):
-    url = f'{API_URL}?modStartDate={start_time}'
-    response = requests.get(url, headers={"API_KEY": api_key})
-    if response.status_code == 200:
-        delta_cves = response.json()['result']['CVE_Items']
-        return delta_cves
-    else:
-        raise ValueError(f"Failed to retrieve delta CVEs. Response code: {response.status_code}")
+def retrieve_cve_data(file_name, url):
+    response = requests.get(url)
+    with open(file_name, 'wb') as f:
+        f.write(response.content)
 
 def create_zip_file(file_name, file_list):
     with zipfile.ZipFile(file_name, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
@@ -37,32 +19,67 @@ def create_zip_file(file_name, file_list):
             zip_file.write(file)
     print(f'Generated {file_name} with {len(file_list)} files')
 
-def create_cve_files(api_key, directory):
-    # Get all CVEs and delta CVEs
-    all_cves = get_all_cves(api_key)
-    delta_cves = get_delta_cves(api_key, datetime.datetime.utcnow().replace(microsecond=0).isoformat() + 'Z')
-
-    # Set the file names
+def create_cve_files(directory):
+    # Set the date prefix
     date_prefix = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-    all_cves_file_name = f"{date_prefix}_all_CVEs.zip"
-    delta_cves_file_name = f"{date_prefix}_delta_CVEs.zip"
-
-    # Create the directory structure
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
+    
+    # Retrieve the data feed files
+    cve_feed_meta_file_name = f"{date_prefix}_cve_feed_meta.json"
+    cve_modified_file_name = f"{date_prefix}_modified.json"
+    cve_recent_file_name = f"{date_prefix}_recent.json"
+    retrieve_cve_data(cve_feed_meta_file_name, f"{NVD_BASE_URL}nvdcve-1.1-%%d.meta")
+    retrieve_cve_data(cve_modified_file_name, f"{NVD_BASE_URL}nvdcve-1.1-modified.json.gz")
+    retrieve_cve_data(cve_recent_file_name, f"{NVD_BASE_URL}nvdcve-1.1-recent.json.gz")
+    
+    # Create the recent activities directory
     os.makedirs(f"{directory}/recent_activities")
+    with open(f"{directory}/recent_activities/{cve_recent_file_name}", 'wb') as f:
+        with open(cve_recent_file_name, 'rb') as cve_file:
+            f.write(cve_file.read())
+    os.remove(cve_recent_file_name)
+    
+    # Create the CVE files for each year and CVE ID
     for year in range(1999, datetime.datetime.today().year + 1):
         os.makedirs(f"{directory}/{year}")
         for cve_id in range(1, 10000):
-            os.makedirs(f"{directory}/{year}/{str(cve_id).zfill(4)}")
-
-    # Create the all CVEs zip file
-    with open(f"{directory}/recent_activities.json", 'w') as f:
-        f.write(json.dumps(all_cves))
-    create_zip_file(all_cves_file_name, [f"{directory}/recent_activities.json"])
-    os.remove(f"{directory}/recent_activities.json")
+            cve_id_str = str(cve_id).zfill(4)
+            cve_file_name = f"{directory}/{year}/{cve_id_str}/CVE-{year}-{cve_id_str}.json"
+            if os.path.exists(cve_file_name):
+                continue
+            retrieve_cve_data(cve_file_name, f"{NVD_BASE_URL}CVE-%d-%04d.json" % (year, cve_id))
+            if os.path.getsize(cve_file_name) == 0:
+                os.remove(cve_file_name)
+        time.sleep(0.1)
     
-    # Create the delta CVEs zip file
-    with open(f"{directory}/{date_prefix}_delta_CVEs.json", 'w') as f:
-        f.write(json
+    # Create the all CVEs zip file
+    all_cves_file_name = f"{date_prefix}_all_CVEs.zip"
+    all_cve_files = []
+    for year in range(1999, datetime.datetime.today().year + 1):
+        for cve_id in range(1, 10000):
+            cve_id_str = str(cve_id).zfill(4)
+            cve_file_name = f"{directory}/{year}/{cve_id_str}/CVE-{year}-{cve_id_str}.json"
+            if os.path.exists(cve_file_name):
+                all_cve_files.append(cve_file_name)
+    create_zip_file(all_cves_file_name, all_cve_files)
+    
+    # Create the release notes file
+    release_notes_file_name = f"{date_prefix}_Release_Notes.txt"
+    with open(release_notes_file_name, 'w') as f:
+        f.write("Release Notes for CVE List")
+    create_zip_file(release_notes_file_name, [release_notes_file_name])
+    os.remove(release_notes_file_name)
+
+    return (all_cves_file_name, cve_feed_meta_file_name, cve_modified_file_name, cve_recent_file_name)
+
+def commit_cve_files_to_repo(github_token, repo_full_name, branch_name, file_names):
+    g = Github(github_token)
+    repo = g.get_repo(repo_full_name)
+    branch = repo.get_branch(branch_name)
+    commit_title = f'Update CVE release list {datetime.datetime.now().strftime("%Y-%m-%d")}'
+    commit_message = 'Add new CVE release list'
+
+    # Remove old files
+    contents = repo.get_contents('')
+    for content_file in contents:
+        if content_file.type == 'file' and content_file.name.endswith('.zip'):
+            if content_file.name not in file_names:
