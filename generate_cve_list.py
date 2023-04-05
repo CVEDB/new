@@ -49,7 +49,7 @@ def create_cve_files(directory):
             retrieve_cve_data(cve_file_name, f"{NVD_BASE_URL}CVE-%d-%04d.json" % (year, cve_id))
             if os.path.getsize(cve_file_name) == 0:
                 os.remove(cve_file_name)
-        time.sleep(0.1)
+            time.sleep(0.1)
     
     # Create the all CVEs zip file
     all_cves_file_name = f"{date_prefix}_all_CVEs.zip"
@@ -81,5 +81,4 @@ def commit_cve_files_to_repo(github_token, repo_full_name, branch_name, file_nam
     # Remove old files
     contents = repo.get_contents('')
     for content_file in contents:
-        if content_file.type == 'file' and content_file.name.endswith('.zip'):
-            if content_file.name not in file_names:
+       
