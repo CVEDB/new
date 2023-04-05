@@ -52,7 +52,7 @@ def create_cve_files(directory):
                 os.remove(cve_file_name)
             time.sleep(0.1)
 
-        # Create the all CVEs zip file
+    # Create the all CVEs zip file
     all_cves_file_name = f"{date_prefix}_all_CVEs.zip"
     all_cve_files = []
     for year in range(1999, datetime.datetime.today().year + 1):
@@ -82,4 +82,4 @@ def commit_cve_files_to_repo(github_token, repo_full_name, branch_name, file_nam
     contents = repo.get_contents('')
     for content_file in contents:
         if content_file.type == 'file' and content_file.name.endswith('.zip'):
-            if content_file.name not in file_names:
+            if content_file.name not in file_names
