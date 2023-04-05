@@ -83,4 +83,3 @@ def commit_cve_files_to_repo(github_token, repo_full_name, branch_name, file_nam
     for content_file in contents:
         if content_file.type == 'file' and content_file.name.endswith('.zip'):
             if content_file.name not in file_names:
-                repo.delete_file(content_file
