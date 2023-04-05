@@ -2,7 +2,6 @@ import os
 import requests
 import zipfile
 import datetime
-import json
 from github import Github
 
 # Define the API endpoint for the CVE Services API
@@ -17,8 +16,7 @@ def get_api_key(api_key_secret_name):
 def get_all_cves(api_key):
     response = requests.get(API_URL, headers={"API_KEY": api_key})
     if response.status_code == 200:
-        all_cves = response.json()['result']['CVE_Items']
-        return all_cves
+        return response.json()['result']['CVE_Items']
     else:
         raise ValueError(f"Failed to retrieve all CVEs. Response code: {response.status_code}")
         
@@ -26,8 +24,7 @@ def get_delta_cves(api_key, start_time):
     url = f'{API_URL}?modStartDate={start_time}'
     response = requests.get(url, headers={"API_KEY": api_key})
     if response.status_code == 200:
-        delta_cves = response.json()['result']['CVE_Items']
-        return delta_cves
+        return response.json()['result']['CVE_Items']
     else:
         raise ValueError(f"Failed to retrieve delta CVEs. Response code: {response.status_code}")
 
@@ -37,8 +34,7 @@ def create_zip_file(file_name, file_list):
             zip_file.write(file)
     print(f'Generated {file_name} with {len(file_list)} files')
 
-def create_cve_files(api_key, directory):
-    # Get all CVEs and delta CVEs
+def create_cve_files(api_key):
     all_cves = get_all_cves(api_key)
     delta_cves = get_delta_cves(api_key, datetime.datetime.utcnow().replace(microsecond=0).isoformat() + 'Z')
 
@@ -48,16 +44,16 @@ def create_cve_files(api_key, directory):
     delta_cves_file_name = f"{date_prefix}_delta_CVEs.zip"
 
     # Create the all CVEs zip file
-    with open(f"{directory}/{date_prefix}_all_CVEs.json", 'w') as f:
+    with open(f'{date_prefix}_all_CVEs.json', 'w') as f:
         f.write(json.dumps(all_cves))
-    create_zip_file(all_cves_file_name, [f"{directory}/{date_prefix}_all_CVEs.json"])
-    os.remove(f"{directory}/{date_prefix}_all_CVEs.json")
+    create_zip_file(all_cves_file_name, [f'{date_prefix}_all_CVEs.json'])
+    os.remove(f'{date_prefix}_all_CVEs.json')
     
     # Create the delta CVEs zip file
-    with open(f"{directory}/{date_prefix}_delta_CVEs.json", 'w') as f:
+    with open(f'{date_prefix}_delta_CVEs.json', 'w') as f:
         f.write(json.dumps(delta_cves))
-    create_zip_file(delta_cves_file_name, [f"{directory}/{date_prefix}_delta_CVEs.json"])
-    os.remove(f"{directory}/{date_prefix}_delta_CVEs.json")
+    create_zip_file(delta_cves_file_name, [f'{date_prefix}_delta_CVEs.json'])
+    os.remove(f'{date_prefix}_delta_CVEs.json')
     
     # Create the release notes file
     release_notes_file_name = f"{date_prefix}_Release_Notes.txt"
@@ -93,4 +89,9 @@ def commit_cve_files_to_repo(github_token, repo_full_name, branch_name, file_nam
             repo.create_file(file_name, commit_message, content, branch=branch_name)
         else:
             print(f'Updating {file_name}')
-            repo.update_file(file_name, commit
+            repo.update_file(file_name, commit_message, content, repo.get_contents(file_name).sha, branch=branch_name)
+
+    # Commit the changes
+    tree = repo.get_git_tree(branch.commit.sha)
+    commit = repo.create_git_commit(commit_title, commit_message, tree, [branch.commit])
+    branch.edit(commit
