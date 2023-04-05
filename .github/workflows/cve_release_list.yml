@@ -9,13 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Checkout the code from the repository
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
       
       # Set up Python
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3'
+          python-version: '3.x'
       
       # Install Python dependencies
       - name: Install dependencies
@@ -24,12 +25,14 @@ jobs:
       
       # Generate the CVE list and commit changes
       - name: Generate and commit CVE list
-        run: python generate_cve_list.py ${{ secrets.API_KEY }}
-        
-        # Push the changes back to the repository
         env:
-          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
-        uses: stefanzweifel/git-auto-commit-action@v4
-        with:
-          commit_message: 'Update CVE release list'
-          commit_options: '--no-verify'
+          API_KEY: ${{ secrets.API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_FULL_NAME: <owner>/<repository>
+          BRANCH_NAME: <branch_name>
+        run: |
+          python generate_cve_list.py
+          python commit_cve_files_to_repo.py --github-token $GITHUB_TOKEN \
+                                             --repo-full-name $REPO_FULL_NAME \
+                                             --branch-name $BRANCH_NAME
+    
