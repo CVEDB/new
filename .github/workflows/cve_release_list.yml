@@ -1,8 +1,10 @@
 name: Daily CVE Release List
 
 on:
-  schedule:
-    - cron: '0 0 * * *' # Run every day at midnight (UTC)
+  push:
+    branches:
+      - master
+  workflow_dispatch:
 
 jobs:
   generate_cve_list:
@@ -22,17 +24,18 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
+          pip install -r requirements.txt
       
       # Generate the CVE list and commit changes
       - name: Generate and commit CVE list
         env:
-          API_KEY: ${{ secrets.API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO_FULL_NAME: <owner>/<repository>
           BRANCH_NAME: <branch_name>
+          DIRECTORY: cve_data
         run: |
-          python generate_cve_list.py
+          python generate_cve_list.py --directory $DIRECTORY
           python commit_cve_files_to_repo.py --github-token $GITHUB_TOKEN \
                                              --repo-full-name $REPO_FULL_NAME \
-                                             --branch-name $BRANCH_NAME
-    
+                                             --branch-name $BRANCH_NAME \
+                                             --file-names $(ls -1 $DIRECTORY/*.zip)
